@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>一括文字入れツール | BatchTextOverlay</title>
+  <meta name="description" content="100枚の写真も、1回の入力で。複数画像に一括でテキストを挿入するWebアプリ。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Noto+Serif+JP:wght@400;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo">
+          <span class="logo-icon">✦</span>
+          <h1>BatchTextOverlay</h1>
+        </div>
+        <p class="tagline">100枚の写真も、1回の入力で。</p>
+      </div>
+      <div class="header-right">
+        <span class="image-count" id="imageCount">0枚選択中</span>
+        <button class="btn btn-export" id="btnExport" disabled>
+          <span class="btn-icon">📦</span>
+          一括書き出し
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <!-- Left Panel: Image Gallery -->
+      <aside class="panel panel-images" id="panelImages">
+        <div class="panel-header">
+          <h2>📷 画像一覧</h2>
+        </div>
+        <div class="image-drop-zone" id="dropZone">
+          <div class="drop-content">
+            <span class="drop-icon">📁</span>
+            <p>画像をドラッグ＆ドロップ</p>
+            <p class="drop-sub">または</p>
+            <label class="btn btn-select" for="fileInput">
+              ファイルを選択
+            </label>
+            <input type="file" id="fileInput" multiple accept="image/*" hidden />
+          </div>
+        </div>
+        <div class="thumbnail-list" id="thumbnailList"></div>
+      </aside>
+
+      <!-- Center: Preview Canvas -->
+      <section class="panel panel-preview" id="panelPreview">
+        <div class="preview-placeholder" id="previewPlaceholder">
+          <span class="placeholder-icon">🖼️</span>
+          <p>画像を選択してプレビューを開始</p>
+        </div>
+        <div class="canvas-wrapper" id="canvasWrapper" style="display:none;">
+          <canvas id="previewCanvas"></canvas>
+          <div class="text-overlay-handle" id="textHandle" style="display:none;">
+            <div class="handle-content" id="handleContent"></div>
+            <div class="resize-handle" id="resizeHandle"></div>
+          </div>
+        </div>
+        <div class="preview-nav" id="previewNav" style="display:none;">
+          <button class="nav-btn" id="btnPrev">◀</button>
+          <span class="nav-info" id="navInfo">1 / 1</span>
+          <button class="nav-btn" id="btnNext">▶</button>
+        </div>
+      </section>
+
+      <!-- Right Panel: Text Settings -->
+      <aside class="panel panel-settings" id="panelSettings">
+        <div class="panel-header">
+          <h2>✏️ テキスト設定</h2>
+        </div>
+        <div class="settings-body">
+          <!-- Text Input -->
+          <div class="setting-group">
+            <label class="setting-label">テキスト</label>
+            <textarea id="textInput" class="text-input" rows="3" placeholder="文字を入力..."></textarea>
+          </div>
+
+          <!-- Writing Direction -->
+          <div class="setting-group">
+            <label class="setting-label">書字方向</label>
+            <div class="toggle-group" id="writingDirection">
+              <button class="toggle-btn active" data-value="horizontal">横書き</button>
+              <button class="toggle-btn" data-value="vertical">縦書き</button>
+            </div>
+          </div>
+
+          <!-- Font -->
+          <div class="setting-group">
+            <label class="setting-label">フォント</label>
+            <select id="fontSelect" class="select-input">
+              <option value="'Noto Sans JP', sans-serif">ゴシック (Noto Sans JP)</option>
+              <option value="'Noto Serif JP', serif">明朝 (Noto Serif JP)</option>
+              <option value="'Zen Maru Gothic', sans-serif">丸ゴシック (Zen Maru Gothic)</option>
+            </select>
+          </div>
+
+          <!-- Font Size -->
+          <div class="setting-group">
+            <label class="setting-label">フォントサイズ <span class="setting-value" id="fontSizeValue">48px</span></label>
+            <input type="range" id="fontSize" class="range-input" min="12" max="200" value="48" />
+          </div>
+
+          <!-- Font Weight -->
+          <div class="setting-group">
+            <label class="setting-label">太さ</label>
+            <select id="fontWeight" class="select-input">
+              <option value="400">レギュラー</option>
+              <option value="700" selected>ボールド</option>
+              <option value="900">エクストラボールド</option>
+            </select>
+          </div>
+
+          <!-- Text Color -->
+          <div class="setting-group">
+            <label class="setting-label">文字色</label>
+            <div class="color-row">
+              <input type="color" id="textColor" class="color-input" value="#ffffff" />
+              <span class="color-hex" id="textColorHex">#ffffff</span>
+            </div>
+          </div>
+
+          <!-- Outline -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>縁取り</span>
+              <label class="switch">
+                <input type="checkbox" id="outlineEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </label>
+            <div class="sub-settings" id="outlineSettings">
+              <div class="color-row">
+                <input type="color" id="outlineColor" class="color-input" value="#000000" />
+                <span class="color-hex" id="outlineColorHex">#000000</span>
+              </div>
+              <label class="setting-label-sm">太さ <span class="setting-value" id="outlineWidthValue">3px</span></label>
+              <input type="range" id="outlineWidth" class="range-input" min="1" max="20" value="3" />
+            </div>
+          </div>
+
+          <!-- Background Band -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>背景帯</span>
+              <label class="switch">
+                <input type="checkbox" id="bgBandEnabled" />
+                <span class="slider"></span>
+              </label>
+            </label>
+            <div class="sub-settings" id="bgBandSettings" style="display:none;">
+              <div class="color-row">
+                <input type="color" id="bgBandColor" class="color-input" value="#000000" />
+                <span class="color-hex" id="bgBandColorHex">#000000</span>
+              </div>
+              <label class="setting-label-sm">透明度 <span class="setting-value" id="bgBandOpacityValue">50%</span></label>
+              <input type="range" id="bgBandOpacity" class="range-input" min="0" max="100" value="50" />
+            </div>
+          </div>
+
+          <!-- Overall Opacity -->
+          <div class="setting-group">
+            <label class="setting-label">全体透明度 <span class="setting-value" id="opacityValue">100%</span></label>
+            <input type="range" id="textOpacity" class="range-input" min="0" max="100" value="100" />
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Export Progress Modal -->
+    <div class="modal-overlay" id="exportModal" style="display:none;">
+      <div class="modal">
+        <h3>📦 一括書き出し中...</h3>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-text" id="progressText">0 / 0</p>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
