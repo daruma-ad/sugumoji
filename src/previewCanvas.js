@@ -1,9 +1,9 @@
 /**
- * Preview Canvas Module
- * テキストオーバーレイのプレビュー描画とドラッグ＆ドロップ配置
+ * Preview Canvas Module (v2.0)
+ * 複数レイヤーの統合描画、ヒットテスト、ドラッグ移動を管理
  */
 
-// 縦書き時の句読点・小書き文字の位置補正マップ
+// 縦書き用の設定定数
 const VERTICAL_PUNCTUATION_MAP = {
     '。': { rotate: false, dx: 0.35, dy: -0.35 },
     '、': { rotate: false, dx: 0.35, dy: -0.35 },
@@ -27,409 +27,310 @@ const VERTICAL_PUNCTUATION_MAP = {
     ')': { rotate: true, dx: 0, dy: 0 },
     '-': { rotate: true, dx: 0, dy: 0 },
 };
-
-// 小書き文字（縦書きで右上に寄せる）
-const SMALL_KANA = new Set([
-    'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ', 'っ', 'ゃ', 'ゅ', 'ょ', 'ゎ',
-    'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ッ', 'ャ', 'ュ', 'ョ', 'ヮ', 'ヵ', 'ヶ',
-]);
+const SMALL_KANA = new Set(['ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ', 'っ', 'ゃ', 'ゅ', 'ょ', 'ゎ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ッ', 'ャ', 'ュ', 'ョ', 'ヮ', 'ヵ', 'ヶ']);
 
 export class PreviewCanvas {
     constructor() {
         this.canvas = document.getElementById('previewCanvas');
         this.ctx = this.canvas.getContext('2d');
 
-        // テキスト配置の正規化座標（0～1）
-        this.textPosition = { x: 0.5, y: 0.5 };
-
-        // 現在の表示画像とスケール
         this.currentImage = null;
+        this.layers = [];
         this.displayScale = 1;
         this.canvasRect = null;
 
-        // ドラッグ状態
+        // Drag/Select state
         this._isDragging = false;
         this._dragOffset = { x: 0, y: 0 };
+        this._selectedLayerId = null;
 
-        // テキスト設定
-        this._textSettings = null;
+        // Callbacks
+        this.onLayerSelect = null;
+        this.onLayerMove = null;
 
-        // テキストの描画サイズ（キャッシュ）
-        this._textBounds = { width: 0, height: 0 };
-
-        this._initDrag();
+        this._initEvents();
     }
 
-    /**
-     * 画像を設定してプレビューを描画
-     */
+    setLayers(layers, selectedId) {
+        this.layers = layers;
+        this._selectedLayerId = selectedId;
+        this.render();
+    }
+
     setImage(imageData) {
-        if (!imageData) {
-            this.currentImage = null;
-            return;
-        }
         this.currentImage = imageData;
         this._fitCanvas();
         this.render();
     }
 
-    /**
-     * テキスト設定を更新して再描画
-     */
-    updateTextSettings(settings) {
-        this._textSettings = settings;
-        this.render();
-    }
-
-    /**
-     * キャンバスをコンテナにフィットさせる
-     */
     _fitCanvas() {
         if (!this.currentImage) return;
-
         const wrapper = document.getElementById('canvasWrapper');
         const wrapperRect = wrapper.getBoundingClientRect();
         const padding = 40;
         const maxW = wrapperRect.width - padding * 2;
         const maxH = wrapperRect.height - padding * 2;
 
-        const imgW = this.currentImage.width;
-        const imgH = this.currentImage.height;
-
-        this.displayScale = Math.min(maxW / imgW, maxH / imgH, 1);
-
-        this.canvas.width = imgW * this.displayScale;
-        this.canvas.height = imgH * this.displayScale;
-        this.canvas.style.width = `${this.canvas.width}px`;
-        this.canvas.style.height = `${this.canvas.height}px`;
+        this.displayScale = Math.min(maxW / this.currentImage.width, maxH / this.currentImage.height, 1);
+        this.canvas.width = this.currentImage.width * this.displayScale;
+        this.canvas.height = this.currentImage.height * this.displayScale;
     }
 
-    /**
-     * メインレンダリング
-     */
     render() {
         if (!this.currentImage) return;
-
         const ctx = this.ctx;
         const s = this.displayScale;
-        const imgW = this.currentImage.width;
-        const imgH = this.currentImage.height;
 
-        // キャンバスクリア
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // 画像描画
-        ctx.drawImage(this.currentImage.img, 0, 0, imgW * s, imgH * s);
+        // 1. Background Image
+        ctx.drawImage(this.currentImage.img, 0, 0, this.canvas.width, this.canvas.height);
 
-        // テキスト描画
-        if (this._textSettings?.text) {
-            this._drawText(ctx, s);
-        }
+        // 2. Layers
+        this.layers.forEach(layer => {
+            this._drawLayer(ctx, layer, s);
+        });
 
         this.canvasRect = this.canvas.getBoundingClientRect();
     }
 
     /**
-     * 実サイズのキャンバスにテキストを描画（書き出し用）
+     * 書き出し用の静止画生成
      */
-    renderToCanvas(imageData, textSettings, textPosition) {
-        const offscreen = document.createElement('canvas');
-        offscreen.width = imageData.width;
-        offscreen.height = imageData.height;
-        const ctx = offscreen.getContext('2d');
+    renderToCanvas(imageData, layers) {
+        const off = document.createElement('canvas');
+        off.width = imageData.width;
+        off.height = imageData.height;
+        const oCtx = off.getContext('2d');
 
-        ctx.drawImage(imageData.img, 0, 0);
-
-        if (textSettings?.text) {
-            const prevSettings = this._textSettings;
-            const prevPos = { ...this.textPosition };
-            this._textSettings = textSettings;
-            this.textPosition = textPosition;
-            this._drawText(ctx, 1);
-            this._textSettings = prevSettings;
-            this.textPosition = prevPos;
-        }
-
-        return offscreen;
+        oCtx.drawImage(imageData.img, 0, 0);
+        layers.forEach(layer => {
+            this._drawLayer(oCtx, layer, 1);
+        });
+        return off;
     }
 
-    /**
-     * テキスト描画ロジック
-     */
-    _drawText(ctx, scale) {
-        const s = this._textSettings;
-        if (!s || !s.text.trim()) return;
-
-        const fontSize = s.fontSize * scale;
-        const font = `${s.fontWeight} ${fontSize}px ${s.fontFamily}`;
-
+    _drawLayer(ctx, layer, scale) {
         ctx.save();
-        ctx.globalAlpha = s.textOpacity / 100;
-        ctx.font = font;
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'left';
+        ctx.globalAlpha = layer.opacity / 100;
 
-        const canvasW = ctx.canvas.width;
-        const canvasH = ctx.canvas.height;
+        if (layer.type === 'text') {
+            this._drawTextLayer(ctx, layer, scale);
+        } else if (layer.type === 'image') {
+            this._drawImageLayer(ctx, layer, scale);
+        }
 
-        if (s.direction === 'vertical') {
-            this._drawVerticalText(ctx, scale, canvasW, canvasH);
-        } else {
-            this._drawHorizontalText(ctx, scale, canvasW, canvasH);
+        // Selected highlight
+        if (layer.id === this._selectedLayerId) {
+            this._drawSelectionBorder(ctx, layer, scale);
         }
 
         ctx.restore();
     }
 
-    /**
-     * 横書きテキスト描画
-     */
-    _drawHorizontalText(ctx, scale, canvasW, canvasH) {
-        const s = this._textSettings;
-        const fontSize = s.fontSize * scale;
-        const lines = s.text.split('\n');
+    _drawTextLayer(ctx, layer, scale) {
+        const fontSize = layer.fontSize * scale;
+        ctx.font = `${layer.fontWeight} ${fontSize}px ${layer.fontFamily}`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+
+        if (layer.writingDirection === 'vertical') {
+            this._drawVerticalText(ctx, layer, scale);
+        } else {
+            this._drawHorizontalText(ctx, layer, scale);
+        }
+    }
+
+    _drawHorizontalText(ctx, layer, scale) {
+        const fontSize = layer.fontSize * scale;
+        const lines = layer.text.split('\n');
         const lineHeight = fontSize * 1.4;
 
-        // テキスト全体のサイズを計算
         let maxWidth = 0;
-        for (const line of lines) {
-            const metrics = ctx.measureText(line || ' ');
-            maxWidth = Math.max(maxWidth, metrics.width);
-        }
+        lines.forEach(line => maxWidth = Math.max(maxWidth, ctx.measureText(line || ' ').width));
         const totalHeight = lineHeight * lines.length;
 
-        this._textBounds = { width: maxWidth / canvasW, height: totalHeight / canvasH };
+        const baseX = layer.x * ctx.canvas.width - maxWidth / 2;
+        const baseY = layer.y * ctx.canvas.height - totalHeight / 2;
 
-        const baseX = this.textPosition.x * canvasW - maxWidth / 2;
-        const baseY = this.textPosition.y * canvasH - totalHeight / 2;
+        // Cache bounds for hit testing in normalized coords
+        layer._bounds = {
+            x: (baseX / ctx.canvas.width),
+            y: (baseY / ctx.canvas.height),
+            w: maxWidth / ctx.canvas.width,
+            h: totalHeight / ctx.canvas.height
+        };
 
-        // 背景帯
-        if (s.bgBandEnabled) {
-            const padding = fontSize * 0.3;
+        if (layer.bgBand.enabled) {
             ctx.save();
-            ctx.globalAlpha = (s.textOpacity / 100) * (s.bgBandOpacity / 100);
-            ctx.fillStyle = s.bgBandColor;
-            ctx.fillRect(
-                baseX - padding,
-                baseY - padding,
-                maxWidth + padding * 2,
-                totalHeight + padding * 2
-            );
+            ctx.globalAlpha *= (layer.bgBand.opacity / 100);
+            ctx.fillStyle = layer.bgBand.color;
+            ctx.fillRect(baseX - fontSize * 0.2, baseY - fontSize * 0.1, maxWidth + fontSize * 0.4, totalHeight + fontSize * 0.2);
             ctx.restore();
-            ctx.globalAlpha = s.textOpacity / 100;
         }
 
-        // テキスト描画
-        for (let i = 0; i < lines.length; i++) {
-            const x = baseX;
+        lines.forEach((line, i) => {
             const y = baseY + i * lineHeight;
-
-            if (s.outlineEnabled && s.outlineWidth > 0) {
-                ctx.strokeStyle = s.outlineColor;
-                ctx.lineWidth = s.outlineWidth * scale;
+            if (layer.outline.enabled) {
+                ctx.strokeStyle = layer.outline.color;
+                ctx.lineWidth = layer.outline.width * scale;
                 ctx.lineJoin = 'round';
-                ctx.strokeText(lines[i], x, y);
+                ctx.strokeText(line, baseX, y);
             }
-
-            ctx.fillStyle = s.textColor;
-            ctx.fillText(lines[i], x, y);
-        }
-    }
-
-    /**
-     * 縦書きテキスト描画
-     */
-    _drawVerticalText(ctx, scale, canvasW, canvasH) {
-        const s = this._textSettings;
-        const fontSize = s.fontSize * scale;
-        const charSize = fontSize;
-        const lineSpacing = fontSize * 1.5;
-        const charSpacing = fontSize * 1.2;
-
-        // 行分割（縦書きでは各行は右から左へ）
-        const lines = s.text.split('\n');
-
-        const totalWidth = lineSpacing * lines.length;
-        let maxChars = 0;
-        for (const line of lines) {
-            maxChars = Math.max(maxChars, [...line].length);
-        }
-        const totalHeight = charSpacing * maxChars;
-
-        this._textBounds = { width: totalWidth / canvasW, height: totalHeight / canvasH };
-
-        const centerX = this.textPosition.x * canvasW;
-        const centerY = this.textPosition.y * canvasH;
-        const startX = centerX + totalWidth / 2;
-        const startY = centerY - totalHeight / 2;
-
-        // 背景帯
-        if (s.bgBandEnabled) {
-            const padding = fontSize * 0.3;
-            ctx.save();
-            ctx.globalAlpha = (s.textOpacity / 100) * (s.bgBandOpacity / 100);
-            ctx.fillStyle = s.bgBandColor;
-            ctx.fillRect(
-                startX - totalWidth - padding,
-                startY - padding,
-                totalWidth + padding * 2,
-                totalHeight + padding * 2
-            );
-            ctx.restore();
-            ctx.globalAlpha = s.textOpacity / 100;
-        }
-
-        // 各行描画（右から左）
-        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-            const chars = [...lines[lineIdx]]; // Unicodeサロゲートペア対応
-            const colX = startX - (lineIdx + 1) * lineSpacing + lineSpacing / 2;
-
-            for (let charIdx = 0; charIdx < chars.length; charIdx++) {
-                const ch = chars[charIdx];
-                const charY = startY + charIdx * charSpacing;
-
-                const punc = VERTICAL_PUNCTUATION_MAP[ch];
-                const isSmall = SMALL_KANA.has(ch);
-
-                ctx.save();
-
-                if (punc?.rotate) {
-                    // 90度回転する文字（ー、カッコなど）
-                    ctx.translate(colX, charY + charSize / 2);
-                    ctx.rotate(Math.PI / 2);
-                    ctx.translate(-colX, -(charY + charSize / 2));
-                }
-
-                let dx = 0, dy = 0;
-                if (punc && !punc.rotate) {
-                    dx = punc.dx * charSize;
-                    dy = punc.dy * charSize;
-                }
-                if (isSmall) {
-                    dx += charSize * 0.1;
-                    dy += -charSize * 0.1;
-                }
-
-                const drawX = colX - charSize / 2 + dx;
-                const drawY = charY + dy;
-
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-
-                if (s.outlineEnabled && s.outlineWidth > 0) {
-                    ctx.strokeStyle = s.outlineColor;
-                    ctx.lineWidth = s.outlineWidth * scale;
-                    ctx.lineJoin = 'round';
-                    ctx.strokeText(ch, drawX, drawY);
-                }
-
-                ctx.fillStyle = s.textColor;
-                ctx.fillText(ch, drawX, drawY);
-
-                ctx.restore();
-            }
-        }
-    }
-
-    /**
-     * テキスト位置を取得
-     */
-    getTextPosition() {
-        return { ...this.textPosition };
-    }
-
-    /**
-     * ドラッグ＆ドロップの初期化
-     */
-    _initDrag() {
-        this.canvas.addEventListener('mousedown', (e) => this._onPointerDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this._onPointerMove(e));
-        window.addEventListener('mouseup', () => this._onPointerUp());
-
-        // タッチサポート
-        this.canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            this._onPointerDown(touch);
-        }, { passive: false });
-
-        this.canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            const touch = e.touches[0];
-            this._onPointerMove(touch);
-        }, { passive: false });
-
-        window.addEventListener('touchend', () => this._onPointerUp());
-
-        // ウィンドウリサイズ対応
-        window.addEventListener('resize', () => {
-            if (this.currentImage) {
-                this._fitCanvas();
-                this.render();
-            }
+            ctx.fillStyle = layer.color;
+            ctx.fillText(line, baseX, y);
         });
     }
 
-    _onPointerDown(e) {
-        if (!this.currentImage || !this._textSettings?.text) return;
+    _drawVerticalText(ctx, layer, scale) {
+        const fontSize = layer.fontSize * scale;
+        const lines = layer.text.split('\n');
+        const lineSpacing = fontSize * 1.5;
+        const charSpacing = fontSize * 1.2;
 
+        const totalWidth = lineSpacing * lines.length;
+        let maxChars = 0;
+        lines.forEach(l => maxChars = Math.max(maxChars, [...l].length));
+        const totalHeight = charSpacing * maxChars;
+
+        const startX = layer.x * ctx.canvas.width + totalWidth / 2;
+        const startY = layer.y * ctx.canvas.height - totalHeight / 2;
+
+        layer._bounds = {
+            x: (startX - totalWidth) / ctx.canvas.width,
+            y: startY / ctx.canvas.height,
+            w: totalWidth / ctx.canvas.width,
+            h: totalHeight / ctx.canvas.height
+        };
+
+        if (layer.bgBand.enabled) {
+            ctx.save();
+            ctx.globalAlpha *= (layer.bgBand.opacity / 100);
+            ctx.fillStyle = layer.bgBand.color;
+            ctx.fillRect(startX - totalWidth - fontSize * 0.2, startY - fontSize * 0.1, totalWidth + fontSize * 0.4, totalHeight + fontSize * 0.2);
+            ctx.restore();
+        }
+
+        lines.forEach((line, lIdx) => {
+            const chars = [...line];
+            const colX = startX - (lIdx + 1) * lineSpacing + lineSpacing / 2;
+            chars.forEach((ch, cIdx) => {
+                const charY = startY + cIdx * charSpacing;
+                const punc = VERTICAL_PUNCTUATION_MAP[ch];
+                ctx.save();
+                if (punc?.rotate) {
+                    ctx.translate(colX, charY + fontSize / 2);
+                    ctx.rotate(Math.PI / 2);
+                    ctx.translate(-colX, -(charY + fontSize / 2));
+                }
+                let dx = (punc && !punc.rotate) ? punc.dx * fontSize : 0;
+                let dy = (punc && !punc.rotate) ? punc.dy * fontSize : 0;
+                if (SMALL_KANA.has(ch)) { dx += fontSize * 0.1; dy -= fontSize * 0.1; }
+
+                const x = colX - fontSize / 2 + dx;
+                if (layer.outline.enabled) {
+                    ctx.strokeStyle = layer.outline.color;
+                    ctx.lineWidth = layer.outline.width * scale;
+                    ctx.lineJoin = 'round';
+                    ctx.strokeText(ch, x, charY + dy);
+                }
+                ctx.fillStyle = layer.color;
+                ctx.fillText(ch, x, charY + dy);
+                ctx.restore();
+            });
+        });
+    }
+
+    _drawImageLayer(ctx, layer, scale) {
+        if (!layer.imageObj) return;
+        const w = layer.size * scale;
+        const h = (layer.origHeight / layer.origWidth) * w;
+        const x = layer.x * ctx.canvas.width - w / 2;
+        const y = layer.y * ctx.canvas.height - h / 2;
+
+        layer._bounds = {
+            x: x / ctx.canvas.width,
+            y: y / ctx.canvas.height,
+            w: w / ctx.canvas.width,
+            h: h / ctx.canvas.height
+        };
+
+        ctx.drawImage(layer.imageObj, x, y, w, h);
+    }
+
+    _drawSelectionBorder(ctx, layer, scale) {
+        const b = layer._bounds;
+        if (!b) return;
+        ctx.strokeStyle = '#8b5cf6';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(b.x * ctx.canvas.width - 2, b.y * ctx.canvas.height - 2, b.w * ctx.canvas.width + 4, b.h * ctx.canvas.height + 4);
+    }
+
+    _initEvents() {
+        this.canvas.addEventListener('mousedown', e => this._onDown(e));
+        window.addEventListener('mousemove', e => this._onMove(e));
+        window.addEventListener('mouseup', () => this._onUp());
+
+        this.canvas.addEventListener('touchstart', e => { e.preventDefault(); this._onDown(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchmove', e => { if (this._isDragging) e.preventDefault(); this._onMove(e.touches[0]); }, { passive: false });
+        window.addEventListener('touchend', () => this._onUp());
+
+        window.addEventListener('resize', () => { if (this.currentImage) { this._fitCanvas(); this.render(); } });
+    }
+
+    _onDown(e) {
+        if (!this.currentImage) return;
         this.canvasRect = this.canvas.getBoundingClientRect();
         const mx = (e.clientX - this.canvasRect.left) / this.canvasRect.width;
         const my = (e.clientY - this.canvasRect.top) / this.canvasRect.height;
 
-        // テキスト範囲内かチェック
-        const tb = this._textBounds;
-        const tx = this.textPosition.x;
-        const ty = this.textPosition.y;
+        // Hit test from top to bottom (last rendered = top)
+        let hitLayer = null;
+        for (let i = this.layers.length - 1; i >= 0; i--) {
+            const layer = this.layers[i];
+            const b = layer._bounds;
+            if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+                hitLayer = layer;
+                break;
+            }
+        }
 
-        if (
-            mx >= tx - tb.width / 2 - 0.02 &&
-            mx <= tx + tb.width / 2 + 0.02 &&
-            my >= ty - tb.height / 2 - 0.02 &&
-            my <= ty + tb.height / 2 + 0.02
-        ) {
+        if (hitLayer) {
             this._isDragging = true;
-            this._dragOffset.x = mx - tx;
-            this._dragOffset.y = my - ty;
+            this._selectedLayerId = hitLayer.id;
+            this._dragOffset = { x: mx - hitLayer.x, y: my - hitLayer.y };
+            if (this.onLayerSelect) this.onLayerSelect(hitLayer.id);
             this.canvas.style.cursor = 'grabbing';
+            this.render();
+        } else {
+            if (this.onLayerSelect) this.onLayerSelect(null);
         }
     }
 
-    _onPointerMove(e) {
-        if (!this._isDragging) {
-            // ホバー時のカーソル変更
-            if (this.canvasRect && this._textSettings?.text) {
-                const mx = (e.clientX - this.canvasRect.left) / this.canvasRect.width;
-                const my = (e.clientY - this.canvasRect.top) / this.canvasRect.height;
-                const tb = this._textBounds;
-                const tx = this.textPosition.x;
-                const ty = this.textPosition.y;
+    _onMove(e) {
+        this.canvasRect = this.canvas.getBoundingClientRect();
+        const mx = (e.clientX - this.canvasRect.left) / this.canvasRect.width;
+        const my = (e.clientY - this.canvasRect.top) / this.canvasRect.height;
 
-                if (
-                    mx >= tx - tb.width / 2 - 0.02 &&
-                    mx <= tx + tb.width / 2 + 0.02 &&
-                    my >= ty - tb.height / 2 - 0.02 &&
-                    my <= ty + tb.height / 2 + 0.02
-                ) {
-                    this.canvas.style.cursor = 'grab';
-                } else {
-                    this.canvas.style.cursor = 'default';
+        if (this._isDragging && this._selectedLayerId) {
+            const x = Math.max(0, Math.min(1, mx - this._dragOffset.x));
+            const y = Math.max(0, Math.min(1, my - this._dragOffset.y));
+            if (this.onLayerMove) this.onLayerMove(this._selectedLayerId, { x, y });
+        } else {
+            // Hover cursor
+            let hit = false;
+            for (let i = this.layers.length - 1; i >= 0; i--) {
+                const b = this.layers[i]._bounds;
+                if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+                    hit = true; break;
                 }
             }
-            return;
+            this.canvas.style.cursor = hit ? 'grab' : 'default';
         }
-
-        this.canvasRect = this.canvas.getBoundingClientRect();
-        const mx = (e.clientX - this.canvasRect.left) / this.canvasRect.width;
-        const my = (e.clientY - this.canvasRect.top) / this.canvasRect.height;
-
-        this.textPosition.x = Math.max(0, Math.min(1, mx - this._dragOffset.x));
-        this.textPosition.y = Math.max(0, Math.min(1, my - this._dragOffset.y));
-
-        this.render();
     }
 
-    _onPointerUp() {
+    _onUp() {
         if (this._isDragging) {
             this._isDragging = false;
             this.canvas.style.cursor = 'grab';

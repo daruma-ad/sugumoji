@@ -1,5 +1,5 @@
 /**
- * Batch Export Module
+ * Batch Export Module (v2.0)
  * 一括書き出し（ZIPダウンロード）
  */
 
@@ -7,13 +7,9 @@ import JSZip from 'jszip';
 
 export class BatchExport {
     /**
-     * 全画像にテキストを合成してZIPでダウンロード
-     * @param {Array} images - 画像データの配列
-     * @param {Object} textSettings - テキスト設定
-     * @param {Object} textPosition - テキスト位置
-     * @param {PreviewCanvas} previewCanvas - PreviewCanvasインスタンス
+     * 全画像に全レイヤーを合成してZIPでダウンロード
      */
-    static async exportAll(images, textSettings, textPosition, previewCanvas) {
+    static async exportAll(images, layers, previewCanvas) {
         if (images.length === 0) return;
 
         const modal = document.getElementById('exportModal');
@@ -26,45 +22,39 @@ export class BatchExport {
         const folder = zip.folder('batch_text_output');
 
         for (let i = 0; i < images.length; i++) {
-            // プログレス更新
             const progress = ((i + 1) / images.length) * 100;
             progressFill.style.width = `${progress}%`;
             progressText.textContent = `${i + 1} / ${images.length}`;
 
-            // 少し待機してUIを更新
-            await new Promise(r => setTimeout(r, 50));
+            // UI更新のための微小待機
+            await new Promise(r => setTimeout(r, 30));
 
-            // Canvas上で画像にテキストを合成
-            const resultCanvas = previewCanvas.renderToCanvas(images[i], textSettings, textPosition);
+            // 複数レイヤーを合成描画
+            const resultCanvas = previewCanvas.renderToCanvas(images[i], layers);
 
             // Canvasをblobに変換
             const blob = await new Promise(resolve => {
                 resultCanvas.toBlob(resolve, 'image/png');
             });
 
-            // ファイル名を生成
-            const ext = images[i].name.includes('.') ? images[i].name.split('.').pop() : 'png';
             const baseName = images[i].name.replace(/\.[^/.]+$/, '');
-            const fileName = `${baseName}_text.png`;
+            const fileName = `${baseName}_overlay.png`;
 
             folder.file(fileName, blob);
         }
 
-        // ZIPを生成してダウンロード
         progressText.textContent = 'ZIPファイルを生成中...';
-
         const zipBlob = await zip.generateAsync({ type: 'blob' });
 
         const url = URL.createObjectURL(zipBlob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `batch_text_${Date.now()}.zip`;
+        a.download = `batch_overlay_${Date.now()}.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        // モーダルを閉じる
         setTimeout(() => {
             modal.style.display = 'none';
             progressFill.style.width = '0%';

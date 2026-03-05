@@ -1,16 +1,18 @@
 /**
- * BatchTextOverlay - Main Entry Point
+ * BatchTextOverlay (v2.0) - Main Entry Point
  */
 
 import './style.css';
 import { ImageManager } from './imageManager.js';
-import { TextSettings } from './textSettings.js';
+import { LayerManager } from './layerManager.js';
+import { LayerSettings } from './layerSettings.js';
 import { PreviewCanvas } from './previewCanvas.js';
 import { BatchExport } from './batchExport.js';
 
 // === Module Instances ===
 const imageManager = new ImageManager();
-const textSettings = new TextSettings();
+const layerManager = new LayerManager();
+const layerSettings = new LayerSettings();
 let previewCanvas = null;
 
 // === DOM Elements ===
@@ -26,25 +28,57 @@ const previewPlaceholder = document.getElementById('previewPlaceholder');
 const canvasWrapper = document.getElementById('canvasWrapper');
 const previewNav = document.getElementById('previewNav');
 
+const btnAddText = document.getElementById('btnAddText');
+const btnAddLogo = document.getElementById('btnAddLogo');
+const logoInput = document.getElementById('logoInput');
+const layerList = document.getElementById('layerList');
+
 // === Initialize ===
 function init() {
-  textSettings.init();
+  layerSettings.init();
   previewCanvas = new PreviewCanvas();
 
   setupFileInput();
   setupDragDrop();
   setupNavigation();
   setupExport();
+  setupLayerControls();
   setupCallbacks();
+
+  // 初期レイヤーを追加（利便性のため）
+  layerManager.addTextLayer();
 }
 
-// === File Input ===
+// === File Inputs ===
 function setupFileInput() {
   fileInput.addEventListener('change', async (e) => {
     if (e.target.files.length > 0) {
       await imageManager.addFiles(e.target.files);
       fileInput.value = '';
     }
+  });
+}
+
+function setupLayerControls() {
+  btnAddText.addEventListener('click', () => {
+    layerManager.addTextLayer();
+  });
+
+  btnAddLogo.addEventListener('click', () => {
+    logoInput.click();
+  });
+
+  logoInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        layerManager.addImageLayer(file, img, url);
+      };
+      img.src = url;
+    }
+    logoInput.value = '';
   });
 }
 
@@ -73,27 +107,19 @@ function setupNavigation() {
   btnPrev.addEventListener('click', () => imageManager.prevImage());
   btnNext.addEventListener('click', () => imageManager.nextImage());
 
-  // キーボードナビゲーション
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-
-    if (e.key === 'ArrowLeft') {
-      imageManager.prevImage();
-    } else if (e.key === 'ArrowRight') {
-      imageManager.nextImage();
-    }
+    if (e.key === 'ArrowLeft') imageManager.prevImage();
+    else if (e.key === 'ArrowRight') imageManager.nextImage();
   });
 }
 
 // === Export ===
 function setupExport() {
   btnExport.addEventListener('click', async () => {
-    const settings = textSettings.getSettings();
-    const position = previewCanvas.getTextPosition();
     await BatchExport.exportAll(
       imageManager.images,
-      settings,
-      position,
+      layerManager.layers,
       previewCanvas
     );
   });
@@ -101,12 +127,11 @@ function setupExport() {
 
 // === Callbacks ===
 function setupCallbacks() {
-  // 画像リスト変更時
+  // 画像関連
   imageManager.onImagesChange = (images) => {
     updateImageCount(images.length);
     updateThumbnailList(images);
     btnExport.disabled = images.length === 0;
-
     if (images.length === 0) {
       previewPlaceholder.style.display = '';
       canvasWrapper.style.display = 'none';
@@ -114,34 +139,80 @@ function setupCallbacks() {
     }
   };
 
-  // 画像選択時
   imageManager.onImageSelect = (index) => {
-    if (index === null) {
-      previewPlaceholder.style.display = '';
-      canvasWrapper.style.display = 'none';
-      previewNav.style.display = 'none';
-      return;
-    }
-
+    if (index === null) return;
     previewPlaceholder.style.display = 'none';
     canvasWrapper.style.display = '';
     previewNav.style.display = '';
-
-    const img = imageManager.images[index];
-    previewCanvas.setImage(img);
-    previewCanvas.updateTextSettings(textSettings.getSettings());
-
+    previewCanvas.setImage(imageManager.images[index]);
+    previewCanvas.setLayers(layerManager.layers, layerManager.selectedIndex !== null ? layerManager.layers[layerManager.selectedIndex].id : null);
     updateNavInfo(index, imageManager.images.length);
     highlightThumbnail(index);
   };
 
-  // テキスト設定変更時
-  textSettings.onChange = (settings) => {
-    previewCanvas.updateTextSettings(settings);
+  // レイヤー関連
+  layerManager.onLayersChange = (layers) => {
+    updateLayerListUI(layers);
+    previewCanvas.setLayers(layers, layerManager.getSelectedLayer()?.id);
+  };
+
+  layerManager.onSelectionChange = (layer) => {
+    layerSettings.setLayer(layer);
+    previewCanvas.setLayers(layerManager.layers, layer?.id);
+  };
+
+  layerSettings.onChange = (id, updates) => {
+    layerManager.updateLayer(id, updates);
+  };
+
+  // キャンバス上の操作
+  previewCanvas.onLayerSelect = (id) => {
+    const idx = layerManager.layers.findIndex(l => l.id === id);
+    layerManager.selectLayer(id ? idx : null);
+  };
+
+  previewCanvas.onLayerMove = (id, pos) => {
+    layerManager.updateLayer(id, pos);
   };
 }
 
 // === UI Update Functions ===
+function updateLayerListUI(layers) {
+  layerList.innerHTML = '';
+  // レイヤーは描画順（0が底）だがUIは上が手前の方が直感的なので逆順に表示
+  [...layers].reverse().forEach((layer, idx) => {
+    const actualIdx = layers.length - 1 - idx;
+    const item = document.createElement('div');
+    item.className = `layer-item${layerManager.selectedIndex === actualIdx ? ' active' : ''}`;
+
+    const icon = layer.type === 'text' ? 'T' : '🖼️';
+    const name = layer.type === 'text' ? (layer.text.substring(0, 10) || 'テキスト') : layer.name;
+
+    item.innerHTML = `
+      <div class="layer-icon">${icon}</div>
+      <div class="layer-info">
+        <div class="layer-name">${name}</div>
+        <div class="layer-type">${layer.type}</div>
+      </div>
+      <div class="layer-actions">
+        <button class="layer-action-btn delete" title="削除">✕</button>
+      </div>
+    `;
+
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete')) return;
+      layerManager.selectLayer(actualIdx);
+    });
+
+    item.querySelector('.delete').addEventListener('click', (e) => {
+      e.stopPropagation();
+      layerManager.removeLayer(layer.id);
+    });
+
+    layerList.appendChild(item);
+  });
+}
+
 function updateImageCount(count) {
   imageCount.textContent = `${count}枚選択中`;
 }
@@ -152,32 +223,24 @@ function updateNavInfo(current, total) {
 
 function updateThumbnailList(images) {
   thumbnailList.innerHTML = '';
-
   images.forEach((img, idx) => {
     const item = document.createElement('div');
     item.className = `thumb-item${idx === imageManager.currentIndex ? ' active' : ''}`;
-    if (idx === 0) item.classList.add('master');
-
     item.innerHTML = `
-      <img class="thumb-img" src="${img.url}" alt="${img.name}" />
+      <img class="thumb-img" src="${img.url}" />
       <div class="thumb-info">
         <div class="thumb-name">${img.name}</div>
-        <div class="thumb-size">${img.width}×${img.height}</div>
       </div>
-      <button class="thumb-remove" data-id="${img.id}" title="削除">✕</button>
+      <button class="thumb-remove" data-id="${img.id}">✕</button>
     `;
-
     item.addEventListener('click', (e) => {
       if (e.target.classList.contains('thumb-remove')) return;
       imageManager.selectImage(idx);
     });
-
-    const removeBtn = item.querySelector('.thumb-remove');
-    removeBtn.addEventListener('click', (e) => {
+    item.querySelector('.thumb-remove').addEventListener('click', (e) => {
       e.stopPropagation();
       imageManager.removeImage(img.id);
     });
-
     thumbnailList.appendChild(item);
   });
 }
@@ -189,5 +252,4 @@ function highlightThumbnail(activeIndex) {
   });
 }
 
-// === Start ===
 init();
