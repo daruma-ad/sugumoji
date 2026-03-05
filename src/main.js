@@ -2,6 +2,7 @@
  * BatchTextOverlay - Main Entry Point
  */
 
+import './style.css';
 import { ImageManager } from './imageManager.js';
 import { TextSettings } from './textSettings.js';
 import { PreviewCanvas } from './previewCanvas.js';
