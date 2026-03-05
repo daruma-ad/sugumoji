@@ -1,9 +1,7 @@
 /**
  * BatchTextOverlay - Main Entry Point
- * 全モジュールの統合・初期化・イベントハンドリング
  */
 
-import './style.css';
 import { ImageManager } from './imageManager.js';
 import { TextSettings } from './textSettings.js';
 import { PreviewCanvas } from './previewCanvas.js';
