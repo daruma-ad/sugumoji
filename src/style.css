@@ -990,3 +990,53 @@ body {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
 }
+
+/* --- Export Settings --- */
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0 12px;
+  transition: all var(--transition-fast);
+}
+
+.input-with-unit:focus-within {
+  border-color: var(--accent-primary);
+  background: rgba(139, 92, 246, 0.05);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.1);
+}
+
+.number-input {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  height: 40px;
+  width: 100%;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+}
+
+.input-unit {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.setting-tip {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.sub-settings {
+  padding-left: 12px;
+  border-left: 2px solid var(--border-color);
+  margin-top: 10px;
+}

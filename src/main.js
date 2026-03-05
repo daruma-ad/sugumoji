@@ -116,11 +116,57 @@ function setupNavigation() {
 
 // === Export ===
 function setupExport() {
+  const exportFormat = document.getElementById('exportFormat');
+  const exportMode = document.getElementById('exportMode');
+  const qualitySettings = document.getElementById('qualitySettings');
+  const resizeMode = document.getElementById('resizeMode');
+  const resizeValueGroup = document.getElementById('resizeValueGroup');
+
+  // 形式切り替え
+  exportFormat.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      exportFormat.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const format = btn.dataset.value;
+      qualitySettings.style.display = format === 'image/png' ? 'none' : 'block';
+    });
+  });
+
+  // 書き出しモード切り替え (画質 vs KB)
+  exportMode.addEventListener('change', () => {
+    const isQuality = exportMode.value === 'quality';
+    document.getElementById('exportModeLabel').textContent = isQuality ? '画質' : '上限サイズ';
+    document.getElementById('exportModeUnit').textContent = isQuality ? '%' : 'KB';
+    document.getElementById('exportModeTip').textContent = isQuality
+      ? '※数値が高いほど高画質ですが容量が増えます。'
+      : '※指定したサイズに収まるよう画質を自動調整します。';
+    document.getElementById('exportModeValue').value = isQuality ? 85 : 500;
+  });
+
+  // リサイズモード切り替え
+  resizeMode.addEventListener('change', () => {
+    const mode = resizeMode.value;
+    resizeValueGroup.style.display = mode === 'none' ? 'none' : 'block';
+    document.getElementById('resizeUnit').textContent = mode === 'width' ? 'px' : '%';
+    document.getElementById('resizeLabel').textContent = mode === 'width' ? '最大幅' : '縮小率';
+    document.getElementById('resizeValue').value = mode === 'width' ? 1200 : 75;
+  });
+
   btnExport.addEventListener('click', async () => {
+    // 書き出し設定の収集
+    const settings = {
+      format: exportFormat.querySelector('.toggle-btn.active').dataset.value,
+      mode: exportMode.value,
+      value: parseInt(document.getElementById('exportModeValue').value),
+      resizeMode: resizeMode.value,
+      resizeValue: parseInt(document.getElementById('resizeValue').value)
+    };
+
     await BatchExport.exportAll(
       imageManager.images,
       layerManager.layers,
-      previewCanvas
+      previewCanvas,
+      settings
     );
   });
 }

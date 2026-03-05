@@ -200,6 +200,59 @@
             <label class="setting-label">全体透明度 <span class="setting-value" id="opacityValue">100%</span></label>
             <input type="range" id="layerOpacity" class="range-input" min="0" max="100" value="100" />
           </div>
+
+          <hr class="panel-divider" />
+
+          <div class="panel-header">
+            <h2>💾 書き出し設定</h2>
+          </div>
+
+          <div class="setting-group">
+            <label class="setting-label">保存形式</label>
+            <div class="toggle-group" id="exportFormat">
+              <button class="toggle-btn active" data-value="image/png">PNG</button>
+              <button class="toggle-btn" data-value="image/jpeg">JPEG</button>
+              <button class="toggle-btn" data-value="image/webp">WebP</button>
+            </div>
+          </div>
+
+          <!-- Quality / KB Limit -->
+          <div id="qualitySettings" style="display:none;">
+            <div class="setting-group">
+              <label class="setting-label">書き出しモード</label>
+              <select id="exportMode" class="select-input">
+                <option value="quality">画質を指定 (%)</option>
+                <option value="size">ファイルサイズ上限 (KB)</option>
+              </select>
+            </div>
+
+            <div class="setting-group">
+              <label class="setting-label" id="exportModeLabel">画質</label>
+              <div class="input-with-unit">
+                <input type="number" id="exportModeValue" class="number-input" value="85" min="1" />
+                <span class="input-unit" id="exportModeUnit">%</span>
+              </div>
+              <p class="setting-tip" id="exportModeTip">※数値が高いほど高画質ですが容量が増えます。</p>
+            </div>
+          </div>
+
+          <!-- Resize -->
+          <div class="setting-group">
+            <label class="setting-label">リサイズ</label>
+            <select id="resizeMode" class="select-input">
+              <option value="none">なし (オリジナルサイズ)</option>
+              <option value="width">最大幅 (px) 指定</option>
+              <option value="scale">縮小率 (%) 指定</option>
+            </select>
+          </div>
+
+          <div class="setting-group" id="resizeValueGroup" style="display:none;">
+            <label class="setting-label" id="resizeLabel">指定値</label>
+            <div class="input-with-unit">
+              <input type="number" id="resizeValue" class="number-input" value="1200" min="1" />
+              <span class="input-unit" id="resizeUnit">px</span>
+            </div>
+          </div>
         </div>
       </aside>
     </main>
