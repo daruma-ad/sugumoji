@@ -58,8 +58,8 @@
 ### CI/CD構成
 - GitHub Actions を使用して、`main` brance へのプッシュ時に自動的にビルドとデプロイが行われるように設定しました。
 
-### 本番環境公開確認
-![SuguMoji Live Site Verification](/Users/takeshi/.gemini/antigravity/brain/40904e70-a68c-489d-a7f8-4111fca95966/sugumoji_live_site_1772763491813.png)
+### 本番環境公開確認（UI修正済み）
+![SuguMoji Live Site Verified](/Users/takeshi/.gemini/antigravity/brain/40904e70-a68c-489d-a7f8-4111fca95966/sugumoji_ui_verified_1772768339992.png)
 
 ---
 
