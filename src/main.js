@@ -8,11 +8,13 @@ import { LayerManager } from './layerManager.js';
 import { LayerSettings } from './layerSettings.js';
 import { PreviewCanvas } from './previewCanvas.js';
 import { BatchExport } from './batchExport.js';
+import { HistoryManager } from './historyManager.js';
 
 // === Module Instances ===
 const imageManager = new ImageManager();
 const layerManager = new LayerManager();
 const layerSettings = new LayerSettings();
+const historyManager = new HistoryManager();
 let previewCanvas = null;
 
 // === DOM Elements ===
@@ -36,6 +38,7 @@ const layerList = document.getElementById('layerList');
 // === Initialize ===
 function init() {
   layerSettings.init();
+  layerSettings.setHistoryManager(historyManager);
   previewCanvas = new PreviewCanvas();
 
   setupFileInput();

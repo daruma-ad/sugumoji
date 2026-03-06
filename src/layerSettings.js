@@ -9,6 +9,7 @@ export class LayerSettings {
 
         // UI Elements
         this.els = {};
+        this.historyManager = null;
     }
 
     /**
@@ -22,7 +23,7 @@ export class LayerSettings {
             'outlineColor', 'outlineColorHex', 'outlineWidth', 'outlineWidthValue',
             'bgBandEnabled', 'bgBandSettings', 'bgBandColor', 'bgBandColorHex',
             'bgBandOpacity', 'bgBandOpacityValue', 'layerSize', 'sizeLabel', 'sizeValue',
-            'layerOpacity', 'opacityValue'
+            'layerOpacity', 'opacityValue', 'textHistory'
         ];
 
         ids.forEach(id => {
@@ -30,6 +31,11 @@ export class LayerSettings {
         });
 
         this._setupEventListeners();
+    }
+
+    setHistoryManager(manager) {
+        this.historyManager = manager;
+        this.renderHistory();
     }
 
     /**
@@ -105,6 +111,14 @@ export class LayerSettings {
         // Text changes
         this.els.textInput.addEventListener('input', () => {
             this._updateLayer({ text: this.els.textInput.value });
+        });
+
+        // 履歴に保存（フォーカスアウト時または一定時間入力がない時を想定だが、簡易的に change で）
+        this.els.textInput.addEventListener('change', () => {
+            if (this.historyManager) {
+                this.historyManager.add(this.els.textInput.value);
+                this.renderHistory();
+            }
         });
 
         // Direction
