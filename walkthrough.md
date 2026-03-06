@@ -1,7 +1,7 @@
-# BatchTextOverlay - 開発ウォークスルー
+# SuguMoji - 開発ウォークスルー
 
 ## 概要
-複数の画像に一括でテキストを挿入するWebアプリ「**BatchTextOverlay**」を構築しました。
+複数の画像に一括でテキストを挿入するWebアプリ「**SuguMoji**」を構築しました。
 
 ---
 
@@ -53,10 +53,13 @@
 ## 本番環境
 
 アプリは GitHub Pages にデプロイされており、以下のURLから利用可能です。
-**URL: [https://daruma-ad.github.io/BatchTextOverlay/](https://daruma-ad.github.io/BatchTextOverlay/)**
+**URL: [https://daruma-ad.github.io/sugumoji/](https://daruma-ad.github.io/sugumoji/)**
 
 ### CI/CD構成
-- GitHub Actions を使用して、`main` ブランチへのプッシュ時に自動的にビルドとデプロイが行われるように設定しました。
+- GitHub Actions を使用して、`main` brance へのプッシュ時に自動的にビルドとデプロイが行われるように設定しました。
+
+### 本番環境公開確認
+![SuguMoji Live Site Verification](/Users/takeshi/.gemini/antigravity/brain/40904e70-a68c-489d-a7f8-4111fca95966/sugumoji_live_site_1772763491813.png)
 
 ---
 
