@@ -159,3 +159,42 @@ PRにそのまま使える高品質なスクリーンショットです。
 ![Text History Chips](./pr_asset_history_placeholder.png)
 - **用途**: 効率性を伝える、補足画像。
 - **特徴**: ワンクリックで文字を切り替えられるスピード感を伝えます。
+
+---
+
+## 6. 15秒CM構成案 (Storyboard JSON)
+SNS（YouTube Short, TikTok, Instagram Reels）での広告や紹介動画に使える、15秒の動画構成案です。
+
+```json
+{
+  "title": "SuguMoji 15s Product Intro",
+  "duration": "15s",
+  "target": "EC sellers, SNS creators",
+  "scenes": [
+    {
+      "time": "0-3s",
+      "visual": "大量の未編集写真が散乱している画面から、SuguMojiのロゴへズームイン",
+      "copy": "その文字入れ、まだ1枚ずつやってる？",
+      "audio": "勢いのある効果音 ＋ ナレーション"
+    },
+    {
+      "time": "3-7s",
+      "visual": "ブラウザ画面で100枚の画像をドロップ。一気にサムネイルが並ぶ様子",
+      "copy": "100枚一括、一瞬で完了。",
+      "audio": "シュパパパン！という軽快な効果音"
+    },
+    {
+      "time": "7-11s",
+      "visual": "「縦書き」や「ロゴ挿入」、そして「ファイルサイズ制限」を設定するUIのアップ",
+      "copy": "縦書きも、サイズ調整も自由自在。",
+      "audio": "ナレーション"
+    },
+    {
+      "time": "11-15s",
+      "visual": "一括書き出しボタンをクリック。完了画面とURLを表示",
+      "copy": "スグモジ。今すぐブラウザで検索。",
+      "audio": "爽やかなジングル ＋ ナレーション"
+    }
+  ]
+}
+```
