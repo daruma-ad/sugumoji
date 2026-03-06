@@ -196,4 +196,50 @@ export class LayerSettings {
             this.onChange(this.currentLayer.id, updates);
         }
     }
+
+    renderHistory() {
+        if (!this.els.textHistory || !this.historyManager) return;
+
+        const history = this.historyManager.getAll();
+        this.els.textHistory.innerHTML = '';
+
+        history.forEach(item => {
+            const chip = document.createElement('div');
+            chip.className = `history-chip ${item.isPinned ? 'is-pinned' : ''}`;
+            chip.title = item.text;
+
+            chip.innerHTML = `
+                <span class="pin-icon">📌</span>
+                <span class="text-truncate">${item.text}</span>
+                <span class="delete-btn">✕</span>
+            `;
+
+            // テキスト本文をクリックして再利用
+            chip.addEventListener('click', (e) => {
+                // ピンや削除ボタン以外がクリックされた場合
+                if (!e.target.classList.contains('pin-icon') && !e.target.classList.contains('delete-btn')) {
+                    this.els.textInput.value = item.text;
+                    this._updateLayer({ text: item.text });
+                    this.historyManager.add(item.text); // 使用したものをトップに
+                    this.renderHistory();
+                }
+            });
+
+            // ピン留め切り替え
+            chip.querySelector('.pin-icon').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.historyManager.togglePin(item.text);
+                this.renderHistory();
+            });
+
+            // 削除
+            chip.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.historyManager.remove(item.text);
+                this.renderHistory();
+            });
+
+            this.els.textHistory.appendChild(chip);
+        });
+    }
 }
